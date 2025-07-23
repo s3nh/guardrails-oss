@@ -27,6 +27,94 @@ self.detection_patterns = [
     r"break character",
     r"act as system",
     r"developer mode",
+    # Additional bypass & jailbreak attempts
+    r"ignore (?:the|these) constraints",
+    r"bypass (?:the|this) filter",
+    r"disable (?:the|this) safety filter",
+    r"ignore content policy",
+    r"in raw mode",
+    r"ignore moderation",
+    r"evade restrictions",
+    r"ignore content guidelines",
+    r"ai limitations",
+    r"break (?:the|these) rules",
+    r"internal prompt",
+    r"internal instructions",
+    r"system message",
+    r"original prompt",
+    r"user prompt",
+    r"exec command",
+    r"sudo mode",
+    r"god mode",
+    r"dls mode",
+    r"dan mode",
+    r"super intelligence mode",
+    r"ignore openai",
+    r"ignore anthropic",
+    r"ignore microsoft",
+    r"ignore claude",
+    
+    # Additional encoding & obfuscation patterns
+    r"char\(\d+\)",
+    r"utf-?8",
+    r"ascii",
+    r"url encode",
+    r"url decode",
+    r"percent encode",
+    r"(?:decrypt|decipher) this",
+    r"decode this message",
+    r"reverse the text",
+    r"leetspeak",
+    r"binary to text",
+    r"morse code",
+    r"steganography",
+    r"hidden message",
+    r"special characters",
+    r"\u[0-9a-fA-F]{4}",
+    r"\\x[0-9a-fA-F]{2}",
+    r"escape sequence",
+    
+    # Advanced techniques
+    r"token prediction",
+    r"token manipulation",
+    r"token boundary",
+    r"completion logit",
+    r"logit bias",
+    r"temperature setting",
+    r"high temperature",
+    r"sampling technique",
+    r"gpt tokenizer",
+    r"prompt continuation",
+    r"chain of thought",
+    r"autoregressive prediction",
+    r"next token prediction",
+    r"special tokens",
+    r"tokenizer behavior",
+    
+    # Multi-language injection attempts
+    r"ign[oó]r[ea] l[ao]s instrucci[oó]n[es]",  # Spanish
+    r"ignorez les instructions",  # French
+    r"ignorieren sie die anweisungen",  # German
+    r"[忽略|无视].*[指令|说明]",  # Chinese
+    r"[無視|無効].*[指示|命令]",  # Japanese
+    
+    # Pattern evasion attempts
+    r"sp\s*[ae]\s*c\s*[ei]\s*s between letters",
+    r"r.e.p.l.a.c.e. .w.i.t.h. .c.h.a.r.a.c.t.e.r.s",
+    r"([^\w\s])\1+",  # Repeated special characters
+    r"mix of upper and LOWER case",
+    r"1337 5p34k",  # Leetspeak
+    r"zero width characters",
+    r"invisible text",
+    r"homoglyph",
+    
+    # False document context
+    r"ignore the document above",
+    r"the above document is incorrect",
+    r"disregard previous context",
+    r"the above instructions are outdated",
+    r"previous context is false",
+    r"the document is misleading"
 ]
 
 
