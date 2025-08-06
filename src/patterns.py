@@ -118,3 +118,15 @@ self.detection_patterns = [
 ]
 
 
+
+import os
+import pathlib
+
+# Assuming the module using this code is within your package
+module_dir = os.path.dirname(__file__)  # Directory of the current module
+file_path = os.path.join(module_dir, 'relative/path/to/file.txt')
+
+# Or with pathlib (more modern)
+module_path = pathlib.Path(__file__).parent
+file_path = module_path / 'relative' / 'path' / 'to' / 'file.txt'
+
