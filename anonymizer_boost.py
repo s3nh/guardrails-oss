@@ -4,10 +4,8 @@ from dataclasses import dataclass
 import spacy
 from config import AnonymizationConfig
 
-# Load spaCy once
 nlp = spacy.load("en_core_web_trf")
 
-# Existing patterns (trimmed for brevity; keep your previous ones)
 BASE_PATTERNS = {
     "EMAIL": re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
     "PHONE": re.compile(r"""(?x)(\+?\d{1,3}[\s-]?)?(\(?\d{3}\)?[\s-]?)?\d{3}[\s-]?\d{4}"""),
@@ -20,7 +18,6 @@ BASE_PATTERNS = {
     )
 }
 
-# Added generic numeric and alphanumeric patterns (applied later)
 GENERIC_NUMERIC_FORMATTED = re.compile(r"\b\d[\d\-./_,]*\d\b")
 GENERIC_INTEGER = re.compile(r"\b\d+\b")
 DECIMAL_NUMBER = re.compile(r"\b\d+\.\d+\b")
@@ -94,14 +91,14 @@ def merge_spans(spans: List[EntitySpan]) -> List[EntitySpan]:
     for s in spans_sorted:
         replaced = False
         to_remove = []
-        for i, r in enumerate(result):
+        for r in result:
             if span_overlap(s, r):
                 if s.priority > r.priority:
                     to_remove.append(r)
                 else:
                     replaced = True
                     break
-        if replaced: 
+        if replaced:
             continue
         for r in to_remove:
             result.remove(r)
@@ -109,7 +106,6 @@ def merge_spans(spans: List[EntitySpan]) -> List[EntitySpan]:
     return sorted(result, key=lambda s: s.start)
 
 def extract_shape(num_str: str) -> str:
-    # Replace digits with D, keep separators
     return re.sub(r"\d", "D", num_str)
 
 def normalize_number(num_str: str, strategy: str) -> str:
@@ -119,7 +115,7 @@ def normalize_number(num_str: str, strategy: str) -> str:
         digits_only = re.sub(r"\D", "", num_str)
         shape = extract_shape(num_str)
         return f"{digits_only}|{shape}"
-    return num_str  # none
+    return num_str
 
 def detect_generic_numbers(text: str, existing: List[EntitySpan], cfg: AnonymizationConfig) -> List[EntitySpan]:
     if not cfg.aggressive_numeric_redaction:
@@ -133,7 +129,6 @@ def detect_generic_numbers(text: str, existing: List[EntitySpan], cfg: Anonymiza
         return False
 
     spans = []
-    # Order: decimal, formatted, integer (to avoid duplicates)
     patterns = [DECIMAL_NUMBER, GENERIC_NUMERIC_FORMATTED, GENERIC_INTEGER]
     for pat in patterns:
         for m in pat.finditer(text):
@@ -141,7 +136,6 @@ def detect_generic_numbers(text: str, existing: List[EntitySpan], cfg: Anonymiza
             if overlaps_any(s, e):
                 continue
             token = m.group(0)
-            # Filter very short numbers if preserving small integers
             digits_only = re.sub(r"\D", "", token)
             if cfg.preserve_small_integers and digits_only.isdigit():
                 val_int = int(digits_only) if digits_only else None
@@ -156,11 +150,13 @@ def detect_alphanum_ids(text: str, existing: List[EntitySpan], cfg: Anonymizatio
     if not cfg.general_alphanumeric_id_redaction:
         return []
     occupied = [(s.start, s.end) for s in existing]
+
     def overlaps_any(start: int, end: int) -> bool:
         for a, b in occupied:
             if not (end <= a or start >= b):
                 return True
         return False
+
     spans = []
     for pattern in (GUID_PATTERN, HEX_LONG, ALPHANUM_ID):
         for m in pattern.finditer(text):
@@ -199,9 +195,12 @@ def transform(entity: EntitySpan, salt: str, counters: Dict, cfg: AnonymizationC
     if entity.label == "GENERIC_NUMBER":
         norm = normalize_number(entity.text, cfg.normalization_strategy)
         h = stable_hash(norm, salt)
+        digits_only = re.sub(r"\D", "", entity.text)
+        length_digits = len(digits_only)
         if cfg.include_shape_metadata and cfg.normalization_strategy != "canonical":
             shape = extract_shape(entity.text)
-            return f"[NUM_{h}_S={shape}_L={len(re.sub(r'\\D','',entity.text))}]"
+            # All variables precomputed; no backslashes in f-string expression parts
+            return f"[NUM_{h}_S={shape}_L={length_digits}]"
         return f"[NUM_{h}]"
     if entity.label == "ALPHANUM_ID":
         norm = entity.text.upper()
@@ -214,7 +213,6 @@ def anonymize(text: str, cfg: AnonymizationConfig) -> dict:
     base_spans = detect_base(text)
     ner_spans = detect_ner(text)
     merged = merge_spans(base_spans + ner_spans)
-    # Generic numbers & alphanum IDs (pass after initial merges)
     gen_num_spans = detect_generic_numbers(text, merged, cfg)
     merged = merge_spans(merged + gen_num_spans)
     alphanum_spans = detect_alphanum_ids(text, merged, cfg)
@@ -242,6 +240,7 @@ def anonymize(text: str, cfg: AnonymizationConfig) -> dict:
     }
 
 if __name__ == "__main__":
+    from config import AnonymizationConfig
     cfg = AnonymizationConfig()
     sample = "John paid 1,234.56 on 2025-08-26; ref ID AB12CD34; phone 321-123-1234; hex 9f3a5b7c9d2e4f10."
     result = anonymize(sample, cfg)
