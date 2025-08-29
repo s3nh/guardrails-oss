@@ -23,3 +23,21 @@
 **Client:** No, that covers everything. Thank you for your help.
 
 **Bank Employee:** My pleasure. Have a great day!
+\
+
+
+
+
+**Employee:** Hi! How can I help you?
+
+**Client:** I was charged a $35 overdraft fee, but I had money in my savings account.
+
+**Employee:** Let me check your account... I see the issue. You had funds available but no auto-transfer set up. I'll reverse the fee as a courtesy.
+
+**Client:** Thank you! Can you set up overdraft protection?
+
+**Employee:** Done! The fee will be refunded in 24 hours and overdraft protection is now active.
+
+**Client:** Perfect, thanks!
+
+**Employee:** You're welcome. Have a great day!
