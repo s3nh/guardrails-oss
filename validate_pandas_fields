@@ -1,0 +1,43 @@
+from typing import ClassVar
+import pandas as pd
+from pydantic import BaseModel, field_validator
+
+class DataFramePayload(BaseModel):
+    df: pd.DataFrame
+
+    # Define expected columns and their pandas dtypes (string form)
+    expected_spec: ClassVar[dict[str, str]] = {
+        "id": "int64",
+        "timestamp": "datetime64[ns]",
+        "value": "float64",
+        "category": "string"  # or 'object' depending on how you load it
+    }
+
+    # Optional: columns that may be missing (if any)
+    optional_columns: ClassVar[set[str]] = {"category"}
+
+    @field_validator("df")
+    def validate_dataframe(cls, v: pd.DataFrame):
+        cols = set(v.columns)
+
+        required = set(cls.expected_spec.keys()) - cls.optional_columns
+        missing = required - cols
+        if missing:
+            raise ValueError(f"Missing required columns: {sorted(missing)}")
+
+        unexpected = cols - set(cls.expected_spec.keys())
+        if unexpected:
+            raise ValueError(f"Unexpected columns present: {sorted(unexpected)}")
+
+        dtype_errors = []
+        for col, exp_dtype in cls.expected_spec.items():
+            if col not in v.columns:
+                continue  # optional and missing
+            actual = str(v[col].dtype)
+            if actual != exp_dtype:
+                dtype_errors.append(f"{col}: expected {exp_dtype} got {actual}")
+
+        if dtype_errors:
+            raise ValueError("dtype mismatches: " + "; ".join(dtype_errors))
+
+        return v
