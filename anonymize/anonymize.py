@@ -26,9 +26,11 @@ class AnonymizeConfig:
             "NIP": "[NIP]",
             "REGON": "[REGON]",
             "ID_CARD": "[ID_CARD]",
+            "PHONE": "[PHONE]",
             "ADDRESS": "[ADDRESS]",
             "POSTAL_CODE": "[POSTAL_CODE]",
             "TRANSACTION_ID": "[TRANSACTION_ID]",
+            "LONG_NUMBER": "[LONG_NUMBER]",
             "NAME": "[NAME]",
         }
         if self.placeholders is None:
@@ -89,7 +91,6 @@ def anonymize_text(text: str, config: Optional[AnonymizeConfig] = None) -> Anony
     last = 0
     for m in matches:
         if m.start < last:
-            # overlapped by a previous replacement; skip
             continue
         repl = replacement_for(m.category, m.value, cfg)
         out_parts.append(text[last:m.start])
