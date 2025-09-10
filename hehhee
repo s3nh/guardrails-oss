@@ -1,0 +1,95 @@
+import cv2
+import numpy as np
+from pathlib import Path
+from sklearn.metrics.pairwise import cosine_similarity
+
+def extract_image_features(image_path):
+    """Extract multiple features from an image"""
+    img = cv2.imread(str(image_path))
+    if img is None:
+        return None
+    
+    # Resize for consistency
+    img = cv2.resize(img, (256, 256))
+    
+    # 1. Color histogram features
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    hist = cv2.calcHist([hsv], [0,1,2], None, [50,60,60], [0,180,0,256,0,256])
+    hist_features = hist.flatten() / hist.sum()  # Normalize
+    
+    # 2. Texture features (using LBP-like approach)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    
+    # Simple texture measure: standard deviation of gradients
+    grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+    grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+    texture_feature = np.std(np.sqrt(grad_x**2 + grad_y**2))
+    
+    # 3. Mean color values
+    mean_colors = np.mean(img.reshape(-1, 3), axis=0)
+    
+    # Combine features
+    features = np.concatenate([
+        hist_features,
+        [texture_feature],
+        mean_colors
+    ])
+    
+    return features
+
+def select_similar_images(small_dataset_path, large_dataset_path, n_select=100):
+    """Select most similar images from large dataset based on small dataset"""
+    
+    # Extract features from small dataset (reference)
+    small_features = []
+    small_paths = list(Path(small_dataset_path).glob("*.jpg")) + \
+                  list(Path(small_dataset_path).glob("*.png"))
+    
+    for img_path in small_paths:
+        features = extract_image_features(img_path)
+        if features is not None:
+            small_features.append(features)
+    
+    if not small_features:
+        print("No valid images found in small dataset")
+        return []
+    
+    small_features = np.array(small_features)
+    
+    # Calculate reference distribution (mean of small dataset features)
+    reference_mean = np.mean(small_features, axis=0)
+    
+    # Extract features from large dataset
+    large_paths = list(Path(large_dataset_path).glob("*.jpg")) + \
+                  list(Path(large_dataset_path).glob("*.png"))
+    
+    similarities = []
+    valid_paths = []
+    
+    for img_path in large_paths:
+        features = extract_image_features(img_path)
+        if features is not None:
+            # Calculate similarity to reference distribution
+            similarity = cosine_similarity([features], [reference_mean])[0][0]
+            similarities.append(similarity)
+            valid_paths.append(img_path)
+    
+    # Select top N most similar images
+    similarities = np.array(similarities)
+    top_indices = np.argsort(similarities)[-n_select:][::-1]
+    
+    selected_paths = [valid_paths[i] for i in top_indices]
+    selected_scores = [similarities[i] for i in top_indices]
+    
+    return list(zip(selected_paths, selected_scores))
+
+# Usage
+selected_images = select_similar_images(
+    "path/to/small_dataset", 
+    "path/to/large_dataset", 
+    n_select=500
+)
+
+print(f"Selected {len(selected_images)} most similar images")
+for path, score in selected_images[:10]:  # Print top 10
+    print(f"{path.name}: {score:.4f}")
