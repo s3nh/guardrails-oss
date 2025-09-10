@@ -28,9 +28,11 @@ CategoryPriority: Dict[str, int] = {
     "NIP": 80,
     "REGON": 78,
     "ID_CARD": 75,
+    "PHONE": 72,
     "ADDRESS": 70,
     "POSTAL_CODE": 65,
     "TRANSACTION_ID": 60,
+    "LONG_NUMBER": 55,
     "NAME": 10,
 }
 
@@ -111,7 +113,6 @@ def detect_transaction_ids(text: str) -> List[Match]:
     # additional standalone long hex (avoid clashing with UUID which is separate)
     for m in patterns.LONG_HEX.finditer(text):
         token = m.group(0)
-        # Exclude if this span overlaps with an existing match (UUID may have been added)
         res.append(Match(m.start(), m.end(), token, "TRANSACTION_ID", CategoryPriority["TRANSACTION_ID"]))
     return res
 
@@ -119,6 +120,34 @@ def detect_addresses(text: str) -> List[Match]:
     res: List[Match] = []
     for m in patterns.ADDRESS_LINE.finditer(text):
         _add_match(res, m.start(), m.end(), m.group(0), "ADDRESS")
+    return res
+
+def detect_phone(text: str) -> List[Match]:
+    res: List[Match] = []
+    # 1) Keyword-triggered (replace only the number itself)
+    for m in patterns.PHONE_KEYWORD.finditer(text):
+        num_span = m.span("num")
+        raw = m.group("num")
+        digits = ''.join(ch for ch in raw if ch.isdigit())
+        if 9 <= len(digits) <= 11:
+            _add_match(res, num_span[0], num_span[1], raw, "PHONE")
+    # 2) General (+48 optional, common groupings)
+    for m in patterns.PHONE_GENERAL.finditer(text):
+        raw = m.group("num")
+        digits = ''.join(ch for ch in raw if ch.isdigit())
+        # Validate typical lengths (9 domestic, 11 with country code '48')
+        if len(digits) == 9 or (len(digits) == 11 and digits.startswith("48")):
+            _add_match(res, m.start("num"), m.end("num"), raw, "PHONE")
+    return res
+
+def detect_long_numbers(text: str) -> List[Match]:
+    res: List[Match] = []
+    for m in patterns.LONG_NUMBER.finditer(text):
+        raw = m.group(0)
+        # Keep contiguous digits only (>= 9)
+        digits = raw
+        if len(digits) >= 9:
+            _add_match(res, m.start(), m.end(), raw, "LONG_NUMBER")
     return res
 
 def detect_names(
@@ -132,10 +161,8 @@ def detect_names(
 
     for m in patterns.FULL_NAME.finditer(text):
         first, last = m.group(1), m.group(2)
-        # Basic heuristics: require dictionary match for first name if provided
         if fn and first.capitalize() not in fn:
             continue
-        # Optional surname dict if provided
         if sn and (last.split('-')[0].capitalize() not in sn and last.capitalize() not in sn):
             continue
         res.append(Match(m.start(), m.end(), m.group(0), "NAME", CategoryPriority["NAME"]))
@@ -169,33 +196,16 @@ def collect_all_matches(
         detect_nip,
         detect_regon,
         detect_id_card,
+        detect_phone,          # NEW
         detect_addresses,
         detect_postal_code,
         detect_transaction_ids,
+        detect_long_numbers,   # NEW
     ):
         matches.extend(detector(text))
     if enable_names:
         matches.extend(detect_names(text, first_names, surnames))
-    # Deduplicate overlaps: keep highest priority, then longest, then earliest
-    matches.sort(key=lambda m: (m.start, -(m.end - m.start), -m.priority))
-    non_overlapping: List[Match] = []
-    occupied = []  # list of (start,end,priority)
-    for m in matches:
-        overlap = False
-        for kept in non_overlapping:
-            if not (m.end <= kept.start or m.start >= kept.end):
-                # overlap, keep the one with higher priority or longer span
-                if (m.priority > kept.priority) or (m.priority == kept.priority and (m.end - m.start) > (kept.end - kept.start)):
-                    # replace kept if m completely covers or is better
-                    # but simpler: mark overlap and later we'll re-resolve by building non-overlapping sorted by priority
-                    overlap = True
-                    break
-                else:
-                    overlap = True
-                    break
-        if not overlap:
-            non_overlapping.append(m)
-    # Re-run a more robust selection: sort by (priority desc, length desc), greedily choose non-overlapping
+    # Greedy non-overlapping selection by (priority desc, length desc)
     matches.sort(key=lambda m: (m.priority, (m.end - m.start)), reverse=True)
     selected: List[Match] = []
     for m in matches:
