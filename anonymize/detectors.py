@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Dict, Set
+from typing import List, Optional, Dict, Set
 
 from . import patterns
 from .checksums import (
@@ -110,7 +110,6 @@ def detect_transaction_ids(text: str) -> List[Match]:
         token = m.group(1)
         if token:
             _add_match(res, m.start(1), m.end(1), token, "TRANSACTION_ID")
-    # additional standalone long hex
     for m in patterns.LONG_HEX.finditer(text):
         token = m.group(0)
         res.append(Match(m.start(), m.end(), token, "TRANSACTION_ID", CategoryPriority["TRANSACTION_ID"]))
@@ -124,14 +123,12 @@ def detect_addresses(text: str) -> List[Match]:
 
 def detect_phone(text: str) -> List[Match]:
     res: List[Match] = []
-    # 1) Keyword-triggered (replace only the number itself)
     for m in patterns.PHONE_KEYWORD.finditer(text):
         num_span = m.span("num")
         raw = m.group("num")
         digits = ''.join(ch for ch in raw if ch.isdigit())
         if 9 <= len(digits) <= 11:
             _add_match(res, num_span[0], num_span[1], raw, "PHONE")
-    # 2) General (+48 optional, common groupings)
     for m in patterns.PHONE_GENERAL.finditer(text):
         raw = m.group("num")
         digits = ''.join(ch for ch in raw if ch.isdigit())
@@ -141,12 +138,10 @@ def detect_phone(text: str) -> List[Match]:
 
 def detect_long_numbers(text: str) -> List[Match]:
     res: List[Match] = []
-    # contiguous 9+ digits
     for m in patterns.LONG_NUMBER.finditer(text):
         raw = m.group(0)
         if len(raw) >= 9:
             _add_match(res, m.start(), m.end(), raw, "LONG_NUMBER")
-    # 9+ digits allowing whitespace between groups
     for m in patterns.LONG_NUMBER_WS.finditer(text):
         raw = m.group(0)
         digits = ''.join(ch for ch in raw if ch.isdigit())
@@ -154,40 +149,118 @@ def detect_long_numbers(text: str) -> List[Match]:
             _add_match(res, m.start(), m.end(), raw, "LONG_NUMBER")
     return res
 
+# ======================
+# Name detection helpers
+# ======================
+
+def _surname_variant_candidates(token: str) -> Set[str]:
+    """
+    Generate title/capitalized candidates for a surname token, including common
+    feminine<->masculine Polish suffix alternations:
+      - ska <-> ski, cka <-> cki, dzka <-> dzki
+    """
+    t = token.strip()
+    lower = t.lower()
+    cands: Set[str] = set()
+    # base forms
+    cands.add(t.capitalize())
+    cands.add(t.title())
+    # feminine ↔ masculine alternations
+    suffix_map = {
+        "ska": "ski",
+        "cka": "cki",
+        "dzka": "dzki",
+    }
+    for fem, masc in suffix_map.items():
+        if lower.endswith(fem):
+            root = t[: -len(fem)]
+            cands.add((root + fem).capitalize())
+            cands.add((root + masc).capitalize())
+        if lower.endswith(masc):
+            root = t[: -len(masc)]
+            cands.add((root + masc).capitalize())
+            cands.add((root + fem).capitalize())
+    return cands
+
+def _surname_matches_dictionary(surname: str, surnames_dict: Optional[Set[str]]) -> bool:
+    """
+    True if any part of a (possibly hyphenated) surname matches the dictionary,
+    considering feminine/masculine alternations. If no dictionary is provided,
+    return False (to avoid false positives for standalone surnames).
+    """
+    if not surnames_dict:
+        return False
+    parts = surname.split("-")
+    for part in parts:
+        for cand in _surname_variant_candidates(part):
+            if cand in surnames_dict:
+                return True
+    # also try the whole joined token just in case dictionary includes hyphenated forms
+    for cand in _surname_variant_candidates(surname):
+        if cand in surnames_dict:
+            return True
+    return False
+
 def detect_names(
     text: str,
     first_names: Optional[Set[str]] = None,
     surnames: Optional[Set[str]] = None,
 ) -> List[Match]:
     res: List[Match] = []
+    # Normalize dictionaries to Title/Capitalized for case-insensitive match
     fn = set(n.capitalize() for n in (first_names or []))
     sn = set(s.capitalize() for s in (surnames or []))
 
+    # Full name: Firstname + Surname (hyphenated supported)
     for m in patterns.FULL_NAME.finditer(text):
         first, last = m.group(1), m.group(2)
-        if fn and first.capitalize() not in fn:
+        # Gate by first-name dictionary if provided
+        if fn and first.capitalize() not in fn and first.title() not in fn:
             continue
-        # accept hyphenated surnames; normalize with title for ALL CAPS matches
-        last_norm = last.title()
-        base_norm = last.split('-')[0].capitalize()
-        if sn and (base_norm not in sn and last_norm not in sn and last.capitalize() not in sn):
+        # Gate by surname dictionary if provided (any hyphen part, with variant mapping)
+        if sn and not _surname_matches_dictionary(last, sn):
             continue
         res.append(Match(m.start(), m.end(), m.group(0), "NAME", CategoryPriority["NAME"]))
 
+    # Initial + Surname
     for m in patterns.INITIAL_SURNAME.finditer(text):
-        initial, last = m.group(1), m.group(2)
-        last_norm = last.title()
-        base_norm = last.split('-')[0].capitalize()
-        if sn and (base_norm not in sn and last_norm not in sn and last.capitalize() not in sn):
+        last = m.group(2)
+        if sn and not _surname_matches_dictionary(last, sn):
             continue
         res.append(Match(m.start(), m.end(), m.group(0), "NAME", CategoryPriority["NAME"]))
 
+    # Honorific + Name (firstname only)
     for m in patterns.HONORIFIC_NAME.finditer(text):
-        honor, name = m.group(1), m.group(2)
+        name = m.group(2)
         if fn and name.capitalize() not in fn and name.title() not in fn:
             continue
         res.append(Match(m.start(), m.end(), m.group(0), "NAME", CategoryPriority["NAME"]))
 
+    return res
+
+def detect_hyphenated_surname_only(
+    text: str,
+    surnames: Optional[Set[str]] = None,
+) -> List[Match]:
+    """
+    Detect standalone hyphenated surnames like 'Doe-Świerczewska' even without
+    a preceding firstname. This is DICTIONARY-GATED to avoid false positives:
+    at least one hyphen part (or the whole token) must match the surnames dict,
+    considering feminine/masculine alternations.
+    """
+    res: List[Match] = []
+    sn = set(s.capitalize() for s in (surnames or []))
+    if not sn:
+        return res  # require dictionary to keep precision
+    for m in patterns.HYPHENATED_SURNAME_ONLY.finditer(text):
+        token = m.group(1)
+        # Heuristic: ensure it's name-like (each part starts with a letter and looks capitalized or ALL CAPS)
+        parts = token.split("-")
+        looks_named = all(p and p[0].isalpha() and (p[0].isupper() or token.isupper()) for p in parts)
+        if not looks_named:
+            continue
+        if _surname_matches_dictionary(token, sn):
+            res.append(Match(m.start(1), m.end(1), token, "NAME", CategoryPriority["NAME"]))
     return res
 
 def collect_all_matches(
@@ -214,6 +287,8 @@ def collect_all_matches(
         matches.extend(detector(text))
     if enable_names:
         matches.extend(detect_names(text, first_names, surnames))
+        # Standalone hyphenated surnames (dictionary-gated)
+        matches.extend(detect_hyphenated_surname_only(text, surnames))
     # Greedy non-overlapping selection by (priority desc, length desc)
     matches.sort(key=lambda m: (m.priority, (m.end - m.start)), reverse=True)
     selected: List[Match] = []
