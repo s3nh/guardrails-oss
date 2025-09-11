@@ -110,7 +110,7 @@ def detect_transaction_ids(text: str) -> List[Match]:
         token = m.group(1)
         if token:
             _add_match(res, m.start(1), m.end(1), token, "TRANSACTION_ID")
-    # additional standalone long hex (avoid clashing with UUID which is separate)
+    # additional standalone long hex
     for m in patterns.LONG_HEX.finditer(text):
         token = m.group(0)
         res.append(Match(m.start(), m.end(), token, "TRANSACTION_ID", CategoryPriority["TRANSACTION_ID"]))
@@ -135,17 +135,21 @@ def detect_phone(text: str) -> List[Match]:
     for m in patterns.PHONE_GENERAL.finditer(text):
         raw = m.group("num")
         digits = ''.join(ch for ch in raw if ch.isdigit())
-        # Validate typical lengths (9 domestic, 11 with country code '48')
         if len(digits) == 9 or (len(digits) == 11 and digits.startswith("48")):
             _add_match(res, m.start("num"), m.end("num"), raw, "PHONE")
     return res
 
 def detect_long_numbers(text: str) -> List[Match]:
     res: List[Match] = []
+    # contiguous 9+ digits
     for m in patterns.LONG_NUMBER.finditer(text):
         raw = m.group(0)
-        # Keep contiguous digits only (>= 9)
-        digits = raw
+        if len(raw) >= 9:
+            _add_match(res, m.start(), m.end(), raw, "LONG_NUMBER")
+    # 9+ digits allowing whitespace between groups
+    for m in patterns.LONG_NUMBER_WS.finditer(text):
+        raw = m.group(0)
+        digits = ''.join(ch for ch in raw if ch.isdigit())
         if len(digits) >= 9:
             _add_match(res, m.start(), m.end(), raw, "LONG_NUMBER")
     return res
@@ -163,19 +167,24 @@ def detect_names(
         first, last = m.group(1), m.group(2)
         if fn and first.capitalize() not in fn:
             continue
-        if sn and (last.split('-')[0].capitalize() not in sn and last.capitalize() not in sn):
+        # accept hyphenated surnames; normalize with title for ALL CAPS matches
+        last_norm = last.title()
+        base_norm = last.split('-')[0].capitalize()
+        if sn and (base_norm not in sn and last_norm not in sn and last.capitalize() not in sn):
             continue
         res.append(Match(m.start(), m.end(), m.group(0), "NAME", CategoryPriority["NAME"]))
 
     for m in patterns.INITIAL_SURNAME.finditer(text):
         initial, last = m.group(1), m.group(2)
-        if sn and (last.split('-')[0].capitalize() not in sn and last.capitalize() not in sn):
+        last_norm = last.title()
+        base_norm = last.split('-')[0].capitalize()
+        if sn and (base_norm not in sn and last_norm not in sn and last.capitalize() not in sn):
             continue
         res.append(Match(m.start(), m.end(), m.group(0), "NAME", CategoryPriority["NAME"]))
 
     for m in patterns.HONORIFIC_NAME.finditer(text):
         honor, name = m.group(1), m.group(2)
-        if fn and name.capitalize() not in fn:
+        if fn and name.capitalize() not in fn and name.title() not in fn:
             continue
         res.append(Match(m.start(), m.end(), m.group(0), "NAME", CategoryPriority["NAME"]))
 
@@ -196,11 +205,11 @@ def collect_all_matches(
         detect_nip,
         detect_regon,
         detect_id_card,
-        detect_phone,          # NEW
+        detect_phone,
         detect_addresses,
         detect_postal_code,
         detect_transaction_ids,
-        detect_long_numbers,   # NEW
+        detect_long_numbers,
     ):
         matches.extend(detector(text))
     if enable_names:
