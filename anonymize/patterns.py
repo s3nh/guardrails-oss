@@ -3,13 +3,13 @@ import re
 # Common Polish letters
 PL_WORD = r"[A-Za-zĄĆĘŁŃÓŚŻŹąćęłńóśżź]"
 
-# IBAN: capture alnum with optional spaces; start with two letters
-IBAN_CANDIDATE = re.compile(r"\b([A-Z]{2}[0-9]{2}(?:[ -]?[A-Z0-9]){11,})\b", re.IGNORECASE)
+# IBAN: capture alnum with optional whitespace/dashes between chars; start with two letters
+IBAN_CANDIDATE = re.compile(r"\b([A-Z]{2}[0-9]{2}(?:[\s-]?[A-Z0-9]){11,})\b", re.IGNORECASE)
 
-# Card numbers 13-19 digits, allow spaces/dashes; starting digits 2-6 to reduce FP
-CARD_CANDIDATE = re.compile(r"(?<!\d)(?:[2-6]\d(?:[ -]?\d)){12,18}\b")
+# Card numbers 13-19 digits, allow whitespace/dashes; starting digits 2-6 to reduce FP
+CARD_CANDIDATE = re.compile(r"(?<!\d)(?:[2-6]\d(?:[\s-]?\d)){12,18}\b")
 
-# PESEL: 11 digits with optional separators
+# PESEL: 11 digits with optional separators (space or hyphen)
 PESEL_CANDIDATE = re.compile(r"(?<!\d)(?:\d[ -]?){11}(?!\d)")
 
 # NIP: 10 digits, separators allowed
@@ -81,9 +81,7 @@ HONORIFIC_NAME = re.compile(
     rf"(?i)\b(pan|pani)\s+({PL_WORD}{{2,}})\b"
 )
 
-# Phone numbers (Polish) — robust patterns with/without keywords and +48:
-# - Keyword-triggered: 'tel', 'telefon', 'kom.', 'kontakt' etc.
-# - General: +48 optional, landline (2-3 digit area) or mobile (3-3-3), separators (- . space) and optional parentheses
+# Phone numbers (Polish) — robust patterns with/without keywords and +48
 PHONE_KEYWORD = re.compile(
     r"""(?ix)
     \b
@@ -92,11 +90,11 @@ PHONE_KEYWORD = re.compile(
     (?P<num>
         (?:\+?\s*48[\s\-.]?)?
         (?:
-            \(\s*\d{2}\s*\)[\s\-.]?\d{3}[\s\-.]?\d{2}[\s\-.]?\d{2}   # (22) 123 45 67
+            \(\s*\d{2}\s*\)[\s\-.]?\d{3}[\s\-.]?\d{2}[\s\-.]?\d{2}
             |
-            \d{2}[\s\-.]?\d{3}[\s\-.]?\d{2}[\s\-.]?\d{2}            # 22 123 45 67
+            \d{2}[\s\-.]?\d{3}[\s\-.]?\d{2}[\s\-.]?\d{2}
             |
-            \d{3}[\s\-.]?\d{3}[\s\-.]?\d{3}                        # 600 123 456
+            \d{3}[\s\-.]?\d{3}[\s\-.]?\d{3}
         )
     )
     \b
@@ -122,3 +120,6 @@ PHONE_GENERAL = re.compile(
 
 # Generic long numbers: 9+ consecutive digits (to catch transaction-like or reference numbers not covered elsewhere)
 LONG_NUMBER = re.compile(r"(?<!\d)\d{9,}(?!\d)")
+
+# Generic long numbers split by whitespace: count digits and ensure total >= 9
+LONG_NUMBER_WS = re.compile(r"(?<!\d)(?:\d+\s+){1,}\d+(?!\d)")
