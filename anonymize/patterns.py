@@ -36,11 +36,7 @@ TRANSACTION_BY_KEYWORD = re.compile(
 # Long hex tokens (16-64) but standalone
 LONG_HEX = re.compile(r"(?<![0-9a-fA-F])[0-9a-fA-F]{16,64}(?![0-9a-fA-F])")
 
-# Address heuristics (street line) — improved:
-# - supports more street types
-# - supports hyphenated / multi-token names incl. Roman numerals (e.g., Jana Pawła II)
-# - supports building letters, "m." / "lok." apartment markers
-# - optionally captures trailing postal code + city
+# Address heuristics (street line) — improved
 ADDRESS_LINE = re.compile(
     r"""(?ix)
     \b
@@ -66,22 +62,22 @@ ADDRESS_LINE = re.compile(
     """,
 )
 
-# Full name: Firstname Surname with possible hyphen, using Polish letters
+# Full name: Firstname + Surname (supports multi-part hyphenated surnames)
 FULL_NAME = re.compile(
-    rf"\b({PL_WORD}{{2,}})\s+({PL_WORD}{{2,}}(?:-{PL_WORD}{{2,}})?)\b"
+    rf"\b({PL_WORD}{{2,}})\s+({PL_WORD}{{2,}}(?:-{PL_WORD}{{2,}})*?)\b"
 )
 
-# Initial + Surname: "J. Kowalski"
+# Initial + Surname: "J. Kowalski" (surname can be hyphenated)
 INITIAL_SURNAME = re.compile(
-    rf"\b([A-Z])\.\s*({PL_WORD}{{2,}}(?:-{PL_WORD}{{2,}})?)\b"
+    rf"\b([A-Z])\.\s*({PL_WORD}{{2,}}(?:-{PL_WORD}{{2,}})*)\b"
 )
 
-# Honorific + Name: "Pan Jan", "Pani Anna", capturing following capitalized word
+# Honorific + Name: "Pan Jan", "Pani Anna"
 HONORIFIC_NAME = re.compile(
     rf"(?i)\b(pan|pani)\s+({PL_WORD}{{2,}})\b"
 )
 
-# Phone numbers (Polish) — robust patterns with/without keywords and +48
+# Phone numbers (Polish)
 PHONE_KEYWORD = re.compile(
     r"""(?ix)
     \b
@@ -118,8 +114,11 @@ PHONE_GENERAL = re.compile(
     """
 )
 
-# Generic long numbers: 9+ consecutive digits (to catch transaction-like or reference numbers not covered elsewhere)
+# Generic long numbers (solid)
 LONG_NUMBER = re.compile(r"(?<!\d)\d{9,}(?!\d)")
 
 # Generic long numbers split by whitespace: count digits and ensure total >= 9
 LONG_NUMBER_WS = re.compile(r"(?<!\d)(?:\d+\s+){1,}\d+(?!\d)")
+
+# Standalone hyphenated surname token (e.g., "Doe-Świerczewska") — dictionary-gated in detectors
+HYPHENATED_SURNAME_ONLY = re.compile(rf"\b({PL_WORD}{{2,}}(?:-{PL_WORD}{{2,}})+)\b")
